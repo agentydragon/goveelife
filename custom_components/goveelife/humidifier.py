@@ -1,29 +1,23 @@
 """Humidifier entities for the Govee Life integration."""
 
 from __future__ import annotations
-from typing import Final
-import logging
-import asyncio
 
-from homeassistant.core import HomeAssistant
+import asyncio
+import logging
+from typing import Final
+
+from homeassistant.components.humidifier import (MODE_AUTO,
+                                                 HumidifierDeviceClass,
+                                                 HumidifierEntity,
+                                                 HumidifierEntityFeature)
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (CONF_DEVICES, STATE_OFF, STATE_ON,
+                                 STATE_UNKNOWN)
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from homeassistant.components.humidifier import (
-    MODE_AUTO,
-    HumidifierDeviceClass,
-    HumidifierEntity,
-    HumidifierEntityFeature,
-)
-from homeassistant.const import (
-    CONF_DEVICES,
-    STATE_ON,
-    STATE_OFF,
-    STATE_UNKNOWN,
-)
-
+from .const import CONF_COORDINATORS, DOMAIN
 from .entities import GoveeLifePlatformEntity
-from .const import DOMAIN, CONF_COORDINATORS
 from .utils import GoveeAPI_GetCachedStateValue, async_GoveeAPI_ControlDevice
 
 _LOGGER: Final = logging.getLogger(__name__)
@@ -114,7 +108,42 @@ class GoveeLifeHumidifier(HumidifierEntity, GoveeLifePlatformEntity):
                                     _LOGGER.debug("Adding PRESET mode of %s: %s", gearOption['name'], self._attr_preset_modes_mapping_set[gearOption['name']])
                             elif valueOption['name'] != 'Custom':
                                 self._attr_available_modes.append(valueOption['name'])
-                                self._attr_preset_modes_mapping_set[valueOption['name']] = { "workMode" : self._attr_preset_modes_mapping[valueOption['name']], "modeValue" : valueOption['value'] }
+                                
+                                # Handle different value structures for different modes
+                                # The original code assumed each work mode had exactly one discrete 'value' field,
+                                # but some devices return different structures:
+                                #
+                                # Example from H7160 dehumidifier:
+                                # - Discrete value: {'name': 'gearMode', 'options': [{'name': 'Low', 'value': 1}, ...]}
+                                # - Range value: {'name': 'Auto', 'range': {'min': 80, 'max': 80}}
+                                # - Default value: {'defaultValue': 0, 'name': 'Dryer'}
+                                #
+                                # This causes KeyError: 'value' when accessing valueOption['value'] blindly.
+                                #
+                                # Current fix: Map each work mode to ONE preset with an arbitrarily chosen value
+                                # - For 'value': use as-is
+                                # - For 'defaultValue': use as-is  
+                                # - For 'range': arbitrarily pick the minimum
+                                #
+                                # TODO: Better solutions could include:
+                                # 1. For ranges, create multiple presets (e.g., "Auto 30%", "Auto 50%", "Auto 80%")
+                                # 2. Expose a separate humidity target control when in Auto mode
+                                # 3. Use the range to set min/max constraints on a slider control
+                                # 4. Query the device's current modeValue when in that mode and use it
+                                
+                                mode_value = None
+                                if 'value' in valueOption:
+                                    mode_value = valueOption['value']
+                                elif 'defaultValue' in valueOption:
+                                    mode_value = valueOption['defaultValue']
+                                elif 'range' in valueOption:
+                                    # For Auto mode with range, use the min value
+                                    mode_value = valueOption['range'].get('min', 0)
+                                else:
+                                    _LOGGER.warning("%s - %s: No value found for mode %s, using 0", self._api_id, self._identifier, valueOption['name'])
+                                    mode_value = 0
+                                
+                                self._attr_preset_modes_mapping_set[valueOption['name']] = { "workMode" : self._attr_preset_modes_mapping[valueOption['name']], "modeValue" : mode_value }
             elif cap['type'] == 'devices.capabilities.range' and cap['instance'] == 'humidity':
                 self._attr_min_humidity = cap['parameters']['range']['min']
                 self._attr_max_humidity = cap['parameters']['range']['max']
@@ -125,7 +154,8 @@ class GoveeLifeHumidifier(HumidifierEntity, GoveeLifePlatformEntity):
     def current_humidity(self) -> float:
         """Return current humidity."""
         value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.range', 'humidity')
-        if value is None:
+        # XXX (2025-05-26): The above seems to sometimes return ''
+        if value in (None, ''):
             return None
         return float(value)
 
@@ -175,12 +205,12 @@ class GoveeLifeHumidifier(HumidifierEntity, GoveeLifePlatformEntity):
         except Exception as e:
             _LOGGER.error("%s - %s: async_turn_off failed: %s (%s.%s)", self._api_id, self._identifier, str(e), e.__class__.__module__, type(e).__name__)
 
-    async def async_set_mode(self, preset_mode: str) -> None:
+    async def async_set_mode(self, mode: str) -> None:
         """Set new target preset mode."""
         state_capability = {
             "type": "devices.capabilities.work_mode",
             "instance": "workMode",
-            "value": self._attr_preset_modes_mapping_set[preset_mode]
+            "value": self._attr_preset_modes_mapping_set[mode]
         }
         if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
             self.async_write_ha_state()
