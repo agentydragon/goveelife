@@ -124,17 +124,17 @@ class GoveeLifeHumidifier(HumidifierEntity, GoveeLifePlatformEntity):
     @property
     def current_humidity(self) -> float:
         """Return current humidity."""
-        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.on_off', 'powerSwitch')
-        v = self._state_mapping.get(value, STATE_UNKNOWN)
-        if v == STATE_UNKNOWN:
-            _LOGGER.warning("%s - %s: state: invalid value: %s", self._api_id, self._identifier, value)
-            _LOGGER.debug("%s - %s: state: valid are: %s", self._api_id, self._identifier, self._state_mapping)
-        return v
+        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.range', 'humidity')
+        if value is None:
+            return None
+        return float(value)
 
     @property
     def is_on(self) -> bool:
         """Return true if entity is on."""
-        return self.state == STATE_ON
+        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.on_off', 'powerSwitch')
+        state = self._state_mapping.get(value, STATE_UNKNOWN)
+        return state == STATE_ON
 
     @property
     def mode(self) -> str | None:
