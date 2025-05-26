@@ -45,7 +45,8 @@ class GoveeLifePlatformEntity(CoordinatorEntity, Entity):
             self._api_id = str(entry.data.get(CONF_FRIENDLY_NAME, DEFAULT_NAME))
             self._identifier = (str(device_cfg.get('device')).replace(':', '') + '_' + platform).lower()
 
-            _LOGGER.debug("%s - %s: __init__", self._api_id, self._identifier)
+            prefix = f"{self._api_id} - {self._identifier}: __init__"
+            _LOGGER.debug(prefix)
             self._device_cfg = device_cfg
             self._entry = entry
             self._entry_id = self._entry.entry_id
@@ -70,10 +71,10 @@ class GoveeLifePlatformEntity(CoordinatorEntity, Entity):
             #_LOGGER.debug("%s - %s: __init__ kwargs = %s", self._api_id, self._identifier, kwargs)
             self._init_platform_specific(**kwargs)
             self.entity_id = generate_entity_id(platform + '.{}', self._entity_id, hass=hass)
-            _LOGGER.debug("%s - %s: __init__ complete (uid: %s)", self._api_id, self._identifier, self.uniqueid)
+            _LOGGER.debug(f"{prefix} complete ({self.uniqueid=})")
             #ProgrammingDebug(self,True)
-        except Exception as e:
-            _LOGGER.error("%s - %s: __init__ failed: %s (%s.%s)", self._api_id, self._identifier, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix} failed")
             return None
 
 
@@ -149,8 +150,8 @@ class GoveeLifePlatformEntity(CoordinatorEntity, Entity):
                         value = cap_state.get('value',False)
             #_LOGGER.debug("%s - %s: available result: %s", self._api_id, self._identifier, value) 
             return value
-        except Exception as e:
-            _LOGGER.error("%s - available: Failed: %s (%s.%s)", self._entry_id, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error("%s - available: Failed", self._entry_id)
             return False
 
     @property
@@ -182,7 +183,8 @@ class GoveeAPIUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry_id, device_cfg):
         """Initialize the coordinator."""
         self._identifier = (str(device_cfg['device']).replace(':', '')) + '_GoveeAPIUpdate'
-        _LOGGER.debug("%s - async_GoveeAPI_GetDeviceState: __init__", self._identifier)
+        prefix = f"{self._identifier} - async_GoveeAPI_GetDeviceState: __init__"
+        _LOGGER.debug(prefix)
         scan_interval = hass.data[DOMAIN][entry_id][CONF_PARAMS][CONF_SCAN_INTERVAL]
         super().__init__(hass, _LOGGER, name=self._identifier, update_interval=timedelta(seconds=scan_interval))
         self._entry_id = entry_id
@@ -190,12 +192,13 @@ class GoveeAPIUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Fetch data from the API endpoint."""
+        prefix = f"{self._entry_id} - GoveeAPIUpdateCoordinator: _async_update_data"
         try:
             entry_data = self.hass.data[DOMAIN][self._entry_id]
             async with async_timeout.timeout(entry_data[CONF_PARAMS][CONF_TIMEOUT]):
                 result = await async_GoveeAPI_GetDeviceState(self.hass, self._entry_id, self._device_cfg, True)
-        except Exception as e:
-            _LOGGER.error("%s - GoveeAPIUpdateCoordinator: _async_update_data Failed: %s (%s.%s)", self._entry_id, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix} Failed")
             return False
 
         try:
@@ -203,14 +206,14 @@ class GoveeAPIUpdateCoordinator(DataUpdateCoordinator):
             debug_file = os.path.dirname(os.path.realpath(__file__)) + STATE_DEBUG_FILENAME
             if os.path.isfile(debug_file) and scan_interval is None:
                 scan_interval = 3600
-                _LOGGER.info("%s - GoveeAPIUpdateCoordinator: debug poll interval is %s seconds", DOMAIN, scan_interval)
+                _LOGGER.info(f"{prefix}: debug poll interval is {scan_interval=} seconds")
 
             if scan_interval is not None:
                 scan_interval = timedelta(seconds=scan_interval)
                 if scan_interval != self.update_interval:
                     self.update_interval = scan_interval
-        except Exception as e:
-            _LOGGER.warning("%s - GoveeAPIUpdateCoordinator: _async_update_data update interval change failed: %s (%s.%s)", self._entry_id, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.warning(f"{prefix} update interval change failed")
 
         if result == 429 or result == 401:      
             raise ConfigEntryAuthFailed

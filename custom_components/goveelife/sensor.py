@@ -39,16 +39,17 @@ platform_device_types = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up the sensor platform."""
+    prefix = f"{entry.entry_id} - async_setup_entry {platform}: "
     _LOGGER.debug("Setting up %s platform entry: %s | %s", platform, DOMAIN, entry.entry_id)
     entites=[]
     
     
     try:
-        _LOGGER.debug("%s - async_setup_entry %s: Getting cloud devices from data store", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Getting cloud devices from data store")
         entry_data=hass.data[DOMAIN][entry.entry_id]
         api_devices=entry_data[CONF_DEVICES]
-    except Exception as e:
-        _LOGGER.error("%s - async_setup_entry %s: Getting cloud devices from data store failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Getting cloud devices from data store failed")
         return False
 
     for device_cfg in api_devices:
@@ -63,15 +64,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                         setup=True
                         break
                 if setup:
-                    _LOGGER.debug("%s - async_setup_entry %s: Setup capability: %s|%s|%s ", entry.entry_id, platform, d, capability.get('type',STATE_UNKNOWN).split('.')[-1], capability.get('instance',STATE_UNKNOWN))
+                    _LOGGER.debug(f"{prefix}Setup capability: {d}|{capability.get('type',STATE_UNKNOWN).split('.')[-1]}|{capability.get('instance',STATE_UNKNOWN)}")
                     entity=GoveeLifeSensor(hass, entry, coordinator, device_cfg, platform=platform, cap=capability)
                     entites.append(entity)
             await asyncio.sleep(0)
-        except Exception as e:
-            _LOGGER.error("%s - async_setup_entry %s: Setup device failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix}Setup device failed")
             return False
 
-    _LOGGER.info("%s - async_setup_entry: setup %s %s entities", entry.entry_id, len(entites), platform)
+    _LOGGER.info(f"{prefix}setup {len(entites)} {platform} entities")
     if not entites:
         return None
     async_add_entities(entites)

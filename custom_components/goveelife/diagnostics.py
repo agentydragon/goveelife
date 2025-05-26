@@ -32,34 +32,35 @@ platform='diagnostics'
 
 async def async_get_config_entry_diagnostics( hass: HomeAssistant, entry: ConfigEntry ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
+    prefix = f"{entry.entry_id} - async_get_config_entry_diagnostics {platform}: "
     _LOGGER.debug("Returning %s platform entry: %s", platform, entry.entry_id) 
     try:
-        _LOGGER.debug("%s - async_get_config_entry_diagnostics %s: Add config entry configuration to output", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Add config entry configuration to output")
         diag: dict[str, Any] = { "config": async_redact_data(entry.as_dict(), REDACT_CONFIG) }
-    except Exception as e:
-        _LOGGER.error("%s - async_get_config_entry_diagnostics %s: Adding config entry configuration to output failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Adding config entry configuration to output failed")
         #return False
 
     entry_data = hass.data[DOMAIN][entry.entry_id]
     try:
-        _LOGGER.debug("%s - async_get_config_entry_diagnostics %s: Add cloud received device list", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Add cloud received device list")
         diag["cloud_devices"] = async_redact_data(entry_data[CONF_DEVICES], REDACT_CLOUD_DEVICES)
-    except Exception as e:
-        _LOGGER.error("%s - async_get_config_entry_diagnostics %s: Add cloud received device list failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Add cloud received device list failed")
         #return False
         
     try:
-        _LOGGER.debug("%s - async_get_config_entry_diagnostics %s: Add cloud received device states", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Add cloud received device states")
         diag["cloud_states"] = async_redact_data(entry_data[CONF_STATE], REDACT_CLOUD_STATES)
-    except Exception as e:
-        _LOGGER.error("%s - async_get_config_entry_diagnostics %s: Add cloud received device states: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Add cloud received device states failed")
         #return False
 
     try:
-        _LOGGER.debug("%s - async_get_config_entry_diagnostics %s: Add python module [goveelife] version", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Add python module [goveelife] version")
         diag["py_module_requests"] = version('requests')
-    except Exception as e:
-        _LOGGER.error("%s - async_get_config_entry_diagnostics %s: Add python module [goveelife] version failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Add python module [goveelife] version failed")
         #return False
 
     return diag

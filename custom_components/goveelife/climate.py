@@ -32,14 +32,15 @@ PLATFORM_DEVICE_TYPES = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the climate platform."""
+    prefix = f"{entry.entry_id} - async_setup_entry {PLATFORM}: "
     _LOGGER.debug("Setting up %s platform entry: %s | %s", PLATFORM, DOMAIN, entry.entry_id)
     entities = []
 
     try:
         entry_data = hass.data[DOMAIN][entry.entry_id]
         api_devices = entry_data[CONF_DEVICES]
-    except Exception as e:
-        _LOGGER.error("%s - async_setup_entry %s: Failed to get cloud devices from data store: %s (%s.%s)", entry.entry_id, PLATFORM, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed to get cloud devices from data store")
         return
 
     for device_cfg in api_devices:
@@ -51,8 +52,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             entity = GoveeLifeClimate(hass, entry, coordinator, device_cfg, platform=PLATFORM)
             entities.append(entity)
             await asyncio.sleep(0)
-        except Exception as e:
-            _LOGGER.error("%s - async_setup_entry %s: Failed to setup device: %s (%s.%s)", entry.entry_id, PLATFORM, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix}Failed to setup device")
             return
 
     if entities:
@@ -72,10 +73,11 @@ class GoveeLifeClimate(ClimateEntity, GoveeLifePlatformEntity):
 
     def _init_platform_specific(self, **kwargs):
         """Platform specific init actions."""
-        _LOGGER.debug("%s - %s: _init_platform_specific", self._api_id, self._identifier)
+        prefix = f"{self._api_id} - {self._identifier}: _init_platform_specific"
+        _LOGGER.debug(prefix)
         capabilities = self._device_cfg.get('capabilities', [])
 
-        _LOGGER.debug("%s - %s: _init_platform_specific: processing devices request capabilities", self._api_id, self._identifier)
+        _LOGGER.debug(f"{prefix}: processing devices request capabilities")
         for cap in capabilities:
             #_LOGGER.debug("%s - %s: _init_platform_specific: processing cap: %s", self._api_id, self._identifier, cap)
             if cap['type'] == 'devices.capabilities.on_off':
@@ -91,7 +93,7 @@ class GoveeLifeClimate(ClimateEntity, GoveeLifePlatformEntity):
                         self._attr_hvac_modes_mapping[option['value']] = HVACMode.OFF
                         self._attr_hvac_modes_mapping_set[HVACMode.OFF] = option['value']
                     else:
-                        _LOGGER.warning("%s - %s: _init_platform_specific: unknown on_off option: %s", self._api_id, self._identifier, option)
+                        _LOGGER.warning(f"{prefix}: unknown on_off option: {option}")
             elif cap['type'] == 'devices.capabilities.temperature_setting' and (cap['instance'] in ['targetTemperature', 'sliderTemperature']):
                 self._attr_supported_features |= ClimateEntityFeature.TARGET_TEMPERATURE
                 for field in cap['parameters']['fields']:
@@ -129,17 +131,18 @@ class GoveeLifeClimate(ClimateEntity, GoveeLifePlatformEntity):
             elif cap['type'] == 'devices.capabilities.property' and cap['instance'] == 'sensorTemperature':
                 pass #do nothing as this is handled within 'current_temperature' property
             else:
-                _LOGGER.debug("%s - %s: _init_platform_specific: cap unhandled: %s", self._api_id, self._identifier, cap)
+                _LOGGER.debug(f"{prefix}: cap unhandled: {cap=}")
 
     @property
     def hvac_mode(self) -> str:
         """Return the hvac_mode of the entity."""
-        #_LOGGER.debug("%s - %s: hvac_mode", self._api_id, self._identifier)  
+        prefix = f"{self._api_id} - {self._identifier}: hvac_mode"
+        #_LOGGER.debug(prefix)  
         value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.on_off', 'powerSwitch')
         v = self._attr_hvac_modes_mapping.get(value,STATE_UNKNOWN)
         if v == STATE_UNKNOWN:
-            _LOGGER.warning("%s - %s: hvac_mode: invalid value: %s", self._api_id, self._identifier, value)
-            _LOGGER.debug("%s - %s: hvac_mode: valid are: %s", self._api_id, self._identifier, self._state_mapping)
+            _LOGGER.warning(f"{prefix}: invalid {value=}")
+            _LOGGER.debug(f"{prefix}: valid are: {self._state_mapping=}")
         return v
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -209,19 +212,20 @@ class GoveeLifeClimate(ClimateEntity, GoveeLifePlatformEntity):
     @property
     def target_temperature(self) -> float | None:
         """Return the target temperature of the entity."""
+        prefix = f"{self._api_id} - {self._identifier}: target_temperature: "
         # First try to get the temperature from the current preset mode
         preset_mode = self.preset_mode
-        _LOGGER.debug("%s - %s: target_temperature: current preset mode: %s", self._api_id, self._identifier, preset_mode)
+        _LOGGER.debug(f"{prefix}{preset_mode=}")
 
         if preset_mode and preset_mode in self._attr_preset_modes_mapping_set:
             mode_value = self._attr_preset_modes_mapping_set[preset_mode].get("modeValue")
-            _LOGGER.debug("%s - %s: target_temperature: mode value: %s", self._api_id, self._identifier, mode_value)
+            _LOGGER.debug(f"{prefix}{mode_value=}")
             if mode_value is not None and mode_value != 0:
                 return float(mode_value)
 
         # If no preset mode temperature, try to get it from the slider
         value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.temperature_setting', 'sliderTemperature')
-        _LOGGER.debug("%s - %s: target_temperature: slider value: %s", self._api_id, self._identifier, value)
+        _LOGGER.debug(f"{prefix}{value=}")
         if value is None:
             return None
         temperature = value.get("targetTemperature")

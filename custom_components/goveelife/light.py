@@ -35,15 +35,16 @@ platform_device_types = ['devices.types.light']
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
     """Set up the light platform."""
+    prefix = f"{entry.entry_id} - async_setup_entry {platform}: "
     _LOGGER.debug("Setting up %s platform entry: %s | %s", platform, DOMAIN, entry.entry_id)
     entities = []
         
     try:
-        _LOGGER.debug("%s - async_setup_entry %s: Getting cloud devices from data store", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Getting cloud devices from data store")
         entry_data = hass.data[DOMAIN][entry.entry_id]
         api_devices = entry_data[CONF_DEVICES]
-    except Exception as e:
-        _LOGGER.error("%s - async_setup_entry %s: Getting cloud devices from data store failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Getting cloud devices from data store failed")
         return False
 
     for device_cfg in api_devices:
@@ -51,16 +52,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             if not device_cfg.get('type', STATE_UNKNOWN) in platform_device_types:
                 continue      
             d = device_cfg.get('device')
-            _LOGGER.debug("%s - async_setup_entry %s: Setup device: %s", entry.entry_id, platform, d) 
+            _LOGGER.debug(f"{prefix}Setup device: {d}") 
             coordinator = entry_data[CONF_COORDINATORS][d]
             entity = GoveeLifeLight(hass, entry, coordinator, device_cfg, platform=platform)
             entities.append(entity)
             await asyncio.sleep(0)
-        except Exception as e:
-            _LOGGER.error("%s - async_setup_entry %s: Setup device failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix}Setup device failed")
             return False
 
-    _LOGGER.info("%s - async_setup_entry: setup %s %s entities", entry.entry_id, len(entities), platform)
+    _LOGGER.info(f"{prefix}setup {len(entities)} {platform} entities")
     if not entities:
         return None
     async_add_entities(entities)
@@ -74,10 +75,11 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
 
     def _init_platform_specific(self, **kwargs):
         """Platform specific init actions"""
-        _LOGGER.debug("%s - %s: _init_platform_specific", self._api_id, self._identifier)
+        prefix = f"{self._api_id} - {self._identifier}: _init_platform_specific"
+        _LOGGER.debug(prefix)
         capabilities = self._device_cfg.get('capabilities', [])
 
-        _LOGGER.debug("%s - %s: _init_platform_specific: processing devices request capabilities", self._api_id, self._identifier)
+        _LOGGER.debug(f"{prefix}: processing devices request capabilities")
         for cap in capabilities:
             if cap['type'] == 'devices.capabilities.on_off':
                 self._attr_supported_color_modes.add(ColorMode.ONOFF)
@@ -89,7 +91,7 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
                         self._state_mapping[option['value']] = STATE_OFF
                         self._state_mapping_set[STATE_OFF] = option['value']
                     else:
-                        _LOGGER.warning("%s - %s: _init_platform_specific: unhandled cap option: %s -> %s", self._api_id, self._identifier, cap['type'], option)
+                        _LOGGER.warning(f"{prefix}: unhandled cap option: {cap['type']} -> {option}")
             elif cap['type'] == 'devices.capabilities.range' and cap['instance'] == 'brightness':
                 self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
                 self._brightness_scale = (cap['parameters']['range']['min'], cap['parameters']['range']['max'])
@@ -110,7 +112,7 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
             elif cap['type'] == 'devices.capabilities.dynamic_setting':
                 pass  # TO-BE-DONE: implement as select ? unsure about setting effect
             else:
-                _LOGGER.debug("%s - %s: _init_platform_specific: cap unhandled: %s", self._api_id, self._identifier, cap)
+                _LOGGER.debug(f"{prefix}: cap unhandled: {cap=}")
 
     def _getRGBfromI(self, RGBint):
         blue = RGBint & 255
@@ -128,11 +130,12 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
     @property
     def state(self) -> str | None:
         """Return the current state of the entity."""
+        prefix = f"{self._api_id} - {self._identifier}: state"
         value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.on_off', 'powerSwitch')
         v = self._state_mapping.get(value, STATE_UNKNOWN)
         if v == STATE_UNKNOWN:
-            _LOGGER.warning("%s - %s: state: invalid value: %s", self._api_id, self._identifier, value)
-            _LOGGER.debug("%s - %s: state: valid are: %s", self._api_id, self._identifier, self._state_mapping)
+            _LOGGER.warning(f"{prefix}: invalid {value=}")
+            _LOGGER.debug(f"{prefix}: valid are: {self._state_mapping=}")
         return v
 
     @property
@@ -160,9 +163,10 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Async: Turn entity on"""
+        prefix = f"{self._api_id} - {self._identifier}: async_turn_on"
         try:
-            _LOGGER.debug("%s - %s: async_turn_on", self._api_id, self._identifier)
-            _LOGGER.debug("%s - %s: async_turn_on: kwargs = %s", self._api_id, self._identifier, kwargs)
+            _LOGGER.debug(prefix)
+            _LOGGER.debug(f"{prefix}: {kwargs=}")
             
             if ATTR_BRIGHTNESS in kwargs:
                 state_capability = {
@@ -200,15 +204,16 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
                 if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
                     self.async_write_ha_state()
             else:
-                _LOGGER.debug("%s - %s: async_turn_on: device already on", self._api_id, self._identifier)
-        except Exception as e:
-            _LOGGER.error("%s - %s: async_turn_on failed: %s (%s.%s)", self._api_id, self._identifier, str(e), e.__class__.__module__, type(e).__name__)
+                _LOGGER.debug(f"{prefix}: device already on")
+        except Exception:
+            _LOGGER.error(f"{prefix} failed")
 
     async def async_turn_off(self, **kwargs) -> None:
         """Async: Turn entity off"""
+        prefix = f"{self._api_id} - {self._identifier}: async_turn_off"
         try:
-            _LOGGER.debug("%s - %s: async_turn_off", self._api_id, self._identifier)
-            _LOGGER.debug("%s - %s: async_turn_off: kwargs = %s", self._api_id, self._identifier, kwargs)
+            _LOGGER.debug(prefix)
+            _LOGGER.debug(f"{prefix}: {kwargs=}")
             if self.is_on:
                 state_capability = {
                     "type": "devices.capabilities.on_off",
@@ -218,6 +223,6 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
                 if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
                     self.async_write_ha_state()
             else:
-                _LOGGER.debug("%s - %s: async_turn_on: device already off", self._api_id, self._identifier)
-        except Exception as e:
-            _LOGGER.error("%s - %s: async_turn_off failed: %s (%s.%s)", self._api_id, self._identifier, str(e), e.__class__.__module__, type(e).__name__)
+                _LOGGER.debug(f"{prefix}: device already off")
+        except Exception:
+            _LOGGER.error(f"{prefix} failed")

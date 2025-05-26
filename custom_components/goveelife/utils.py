@@ -27,54 +27,38 @@ _LOGGER: Final = logging.getLogger(__name__)
 
 async def async_ProgrammingDebug(obj, show_all: bool = False) -> None:
     """Async: return all attributes of a specific objec"""
+    prefix = f"{DOMAIN} - async_ProgrammingDebug: "
     try:
-        _LOGGER.debug("%s - async_ProgrammingDebug: %s", DOMAIN, obj)
+        _LOGGER.debug(f"{prefix}{obj}")
         for attr in dir(obj):
             if attr.startswith("_") and not show_all:
                 continue
             if hasattr(obj, attr):
-                _LOGGER.debug(
-                    "%s - async_ProgrammingDebug: %s = %s",
-                    DOMAIN,
-                    attr,
-                    getattr(obj, attr),
-                )
+                _LOGGER.debug(f"{prefix}{attr} = {getattr(obj, attr)}")
             await asyncio.sleep(0)
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_ProgrammingDebug: failed: %s (%s.%s)",
-            DOMAIN,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}failed")
         pass
 
 
 def ProgrammingDebug(obj, show_all: bool = False) -> None:
     """return all attributes of a specific objec"""
+    prefix = f"{DOMAIN} - ProgrammingDebug: "
     try:
-        _LOGGER.debug("%s - ProgrammingDebug: %s", DOMAIN, obj)
+        _LOGGER.debug(f"{prefix}{obj}")
         for attr in dir(obj):
             if attr.startswith("_") and not show_all:
                 continue
             if hasattr(obj, attr):
-                _LOGGER.debug(
-                    "%s - ProgrammingDebug: %s = %s", DOMAIN, attr, getattr(obj, attr)
-                )
-    except Exception as e:
-        _LOGGER.error(
-            "%s - ProgrammingDebug: failed: %s (%s.%s)",
-            DOMAIN,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+                _LOGGER.debug(f"{prefix}{attr} = {getattr(obj, attr)}")
+    except Exception:
+        _LOGGER.error(f"{prefix}failed")
         pass
 
 
 async def async_GooveAPI_CountRequests(hass: HomeAssistant, entry_id: str) -> None:
     """Asnyc: Count daily number of requests to GooveAPI"""
+    prefix = f"{entry_id} - async_GooveAPI_CountRequests: "
     try:
         entry_data = hass.data[DOMAIN][entry_id]
         today = date.today()
@@ -86,20 +70,9 @@ async def async_GooveAPI_CountRequests(hass: HomeAssistant, entry_id: str) -> No
             v[CONF_COUNT] = 1
         entry_data[CONF_API_COUNT] = v
 
-        _LOGGER.debug(
-            "%s - async_GooveAPI_CountRequests: %s -> %s",
-            entry_id,
-            v[ATTR_DATE],
-            v[CONF_COUNT],
-        )
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GooveAPI_CountRequests: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+        _LOGGER.debug(f"{prefix}{v[ATTR_DATE]} -> {v[CONF_COUNT]}")
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return None
 
 
@@ -107,32 +80,23 @@ async def async_GoveeAPI_GETRequest(
     hass: HomeAssistant, entry_id: str, path: str
 ) -> None:
     """Asnyc: Request device list via GooveAPI"""
+    prefix = f"{entry_id} - async_GoveeAPI_GETRequest: "
     try:
         debug_file = os.path.dirname(os.path.realpath(__file__)) + STATE_DEBUG_FILENAME
         if os.path.isfile(debug_file):
-            _LOGGER.debug(
-                "%s - async_GoveeAPI_GETRequest: load debug file: %s",
-                entry_id,
-                debug_file,
-            )
+            _LOGGER.debug(f"{prefix}load debug file: {debug_file}")
             with open(debug_file, "r") as stream:
                 payload = json.load(stream)
                 return payload["data"]["cloud_devices"]
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GETRequest: debug file load failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}debug file load failed")
         return None
 
     try:
-        _LOGGER.debug("%s - async_GoveeAPI_GETRequest: perform api request", entry_id)
+        _LOGGER.debug(f"{prefix}perform api request")
         entry_data = hass.data[DOMAIN][entry_id]
 
-        # _LOGGER.debug("%s - async_GoveeAPI_GETRequest: perpare parameters for GET request"
+        # _LOGGER.debug(f"{prefix}perpare parameters for GET request"
         headers = {
             "Content-Type": "application/json",
             CLOUD_API_HEADER_KEY: str(entry_data[CONF_PARAMS].get(CONF_API_KEY, None)),
@@ -140,42 +104,26 @@ async def async_GoveeAPI_GETRequest(
         timeout = entry_data[CONF_PARAMS].get(CONF_TIMEOUT, None)
         url = CLOUD_API_URL_OPENAPI + "/" + path.strip("/")
 
-        # _LOGGER.debug("%s - async_GoveeAPI_GETRequest: extecute GET request"
+        # _LOGGER.debug(f"{prefix}extecute GET request"
         await async_GooveAPI_CountRequests(hass, entry_id)
         r = await hass.async_add_executor_job(
             lambda: requests.get(url, headers=headers, timeout=timeout)
         )
         if r.status_code == 429:
-            _LOGGER.error(
-                "%s - async_GoveeAPI_GETRequest: Too many API request - limit is 10000/Account/Day",
-                entry_id,
-            )
+            _LOGGER.error(f"{prefix}Too many API request - limit is 10000/Account/Day")
             return None
         elif r.status_code == 401:
-            _LOGGER.error(
-                "%s - async_GoveeAPI_GETRequest: Unauthorize - check you APIKey",
-                entry_id,
-            )
+            _LOGGER.error(f"{prefix}Unauthorize - check you APIKey")
             return None
         elif not r.status_code == 200:
-            _LOGGER.error(
-                "%s - async_GoveeAPI_GETRequest: Failed: %s", entry_id, str(r.text)
-            )
+            _LOGGER.error(f"{prefix}Failed: {r.text}")
             return None
 
-        _LOGGER.debug(
-            "%s - async_GoveeAPI_GETRequest: convert resulting json to object", entry_id
-        )
+        _LOGGER.debug(f"{prefix}convert resulting json to object")
         return json.loads(r.text)["data"]
 
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GETRequest: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return None
 
 
@@ -183,63 +131,48 @@ async def async_GoveeAPI_POSTRequest(
     hass: HomeAssistant, entry_id: str, path: str, data: str, return_status_code=False
 ) -> None:
     """Asnyc: Perform post state request / control request via GooveAPI"""
+    prefix = "%s - async_GoveeAPI_POSTRequest: " % entry_id
     try:
-        # _LOGGER.debug("%s - async_GoveeAPI_POSTRequest: perform api request", entry_id)
+        # _LOGGER.debug(f"{prefix}perform api request")
         entry_data = hass.data[DOMAIN][entry_id]
 
-        # _LOGGER.debug("%s - async_GoveeAPI_POSTRequest: perpare parameters for POST request"
+        # _LOGGER.debug(f"{prefix}perpare parameters for POST request"
         headers = {
             "Content-Type": "application/json",
             CLOUD_API_HEADER_KEY: str(entry_data[CONF_PARAMS].get(CONF_API_KEY, None)),
         }
         timeout = entry_data[CONF_PARAMS].get(CONF_TIMEOUT, None)
         data = re.sub("<dynamic_uuid>", str(uuid.uuid4()), data)
-        _LOGGER.debug("%s - async_GoveeAPI_POSTRequest: data = %s", entry_id, data)
+        _LOGGER.debug(f"{prefix}{data = }")
         data = json.loads(data)
         url = CLOUD_API_URL_OPENAPI + "/" + path.strip("/")
 
-        # _LOGGER.debug("%s - async_GoveeAPI_POSTRequest: extecute POST request"
+        # _LOGGER.debug(f"{prefix}extecute POST request"
         await async_GooveAPI_CountRequests(hass, entry_id)
         r = await hass.async_add_executor_job(
             lambda: requests.post(url, json=data, headers=headers, timeout=timeout)
         )
         if r.status_code == 429:
-            _LOGGER.error(
-                "%s - async_GoveeAPI_POSTRequest: Too many API request - limit is 10000/Account/Day",
-                entry_id,
-            )
+            _LOGGER.error(f"{prefix}Too many API request - limit is 10000/Account/Day")
             if return_status_code == True:
                 return r.status_code
             return None
         elif r.status_code == 401:
-            _LOGGER.error(
-                "%s - async_GoveeAPI_POSTRequest: Unauthorize - check you APIKey",
-                entry_id,
-            )
+            _LOGGER.error(f"{prefix}Unauthorize - check you APIKey")
             if return_status_code == True:
                 return r.status_code
             return None
-        elif not r.status_code == 200:
-            _LOGGER.error(
-                "%s - async_GoveeAPI_POSTRequest: Failed status_code: %s",
-                entry_id,
-                str(r.text),
-            )
+        elif r.status_code != 200:
+            _LOGGER.error(f"{prefix}Failed {r.status_code=}: {r.text}")
             if return_status_code == True:
                 return r.status_code
             return None
 
-        # _LOGGER.debug("%s - async_GoveeAPI_POSTRequest: convert resulting json to object", entry_id)
-        return json.loads(r.text)
+        # _LOGGER.debug(f"{prefix}convert resulting json to object")
+        return r.json()
 
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_POSTRequest: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return None
 
 
@@ -247,8 +180,9 @@ async def async_GoveeAPI_GetDeviceState(
     hass: HomeAssistant, entry_id: str, device_cfg, return_status_code=False
 ) -> None:
     """Asnyc: Request and save state of device via GooveAPI"""
+    prefix = f"{entry_id} - async_GoveeAPI_GetDeviceState: "
     try:
-        # _LOGGER.debug("%s - async_GoveeAPI_GetDeviceState: preparing values", entry_id)
+        # _LOGGER.debug(f"{prefix}preparing values")
         entry_data = hass.data[DOMAIN][entry_id]
         json_str = json.dumps(
             {
@@ -260,35 +194,19 @@ async def async_GoveeAPI_GetDeviceState(
             }
         )
         r = None
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GetDeviceState: preparing values failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}preparing values failed")
         return False
 
     try:
         debug_file = os.path.dirname(os.path.realpath(__file__)) + STATE_DEBUG_FILENAME
         if os.path.isfile(debug_file):
-            _LOGGER.debug(
-                "%s - async_GoveeAPI_GetDeviceState: load debug file: %s",
-                entry_id,
-                debug_file,
-            )
+            _LOGGER.debug(f"{prefix}load debug file: {debug_file}")
             with open(debug_file, "r") as stream:
                 payload = json.load(stream)
                 r = payload["data"]["cloud_states"][device_cfg.get("device")]
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GetDeviceState: debug file load failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}debug file load failed")
         return False
 
     try:
@@ -297,7 +215,7 @@ async def async_GoveeAPI_GetDeviceState(
                 hass, entry_id, "device/state", json_str, return_status_code
             )
             r = r["payload"]
-        _LOGGER.debug("%s - async_GoveeAPI_GetDeviceState: r = %s", entry_id, r)
+        _LOGGER.debug(f"{prefix}r = {r}")
         if isinstance(r, int) and return_status_code == True:
             return r
         if not isinstance(r, int):
@@ -307,14 +225,8 @@ async def async_GoveeAPI_GetDeviceState(
             return True
         return False
 
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GetDeviceState: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return False
 
 
@@ -326,54 +238,35 @@ async def async_GoveeAPI_ControlDevice(
     return_status_code=False,
 ) -> None:
     """Asnyc: Trigger device action via GooveAPI"""
+    prefix = "%s - async_GoveeAPI_ControlDevice: " % entry_id
     try:
-        # _LOGGER.debug("%s - async_GoveeAPI_ControlDevice: preparing values", entry_id)
+        # _LOGGER.debug("{prefix}preparing values")
         entry_data = hass.data[DOMAIN][entry_id]
         state_capability_json = json.dumps(state_capability)
-        json_str = (
-            '{"requestId": "<dynamic_uuid>","payload": {"sku": "'
-            + str(device_cfg.get("sku"))
-            + '","device": "'
-            + str(device_cfg.get("device"))
-            + '","capability": '
-            + state_capability_json
-            + "}}"
+        json_str = json.dumps(
+            {
+                "requestId": "<dynamic_uuid>",
+                "payload": {
+                    "sku": device_cfg.get("sku"),
+                    "device": str(device_cfg.get("device")),
+                    "capability": state_capability,
+                },
+            }
         )
-        _LOGGER.debug(
-            "%s - async_GoveeAPI_ControlDevice: json_str = %s", entry_id, json_str
-        )
+        _LOGGER.debug(f"{prefix}{json_str = }")
         r = None
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_ControlDevice: preparing values failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}preparing values failed")
         return False
 
     try:
         debug_file = os.path.dirname(os.path.realpath(__file__)) + STATE_DEBUG_FILENAME
         if os.path.isfile(debug_file):
-            _LOGGER.debug(
-                "%s - async_GoveeAPI_ControlDevice: create debug reply", entry_id
-            )
+            _LOGGER.debug(f"{prefix}create debug reply")
             state_capability["state"] = {"status": "success"}
-            state_capability_json = json.dumps(state_capability)
-            r = json.loads(
-                '{"requestId": "debug-dummy", "msg": "success", "code": 200, "capability": '
-                + state_capability_json
-                + "}"
-            )
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GetDeviceState: debug reply failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+            r = {"requestId": "debug-dummy", "msg": "success", "code": 200, "capability": state_capability}
+    except Exception:
+        _LOGGER.error(f"{prefix}debug reply failed")
         return False
 
     try:
@@ -381,49 +274,47 @@ async def async_GoveeAPI_ControlDevice(
             r = await async_GoveeAPI_POSTRequest(
                 hass, entry_id, "device/control", json_str, return_status_code
             )
-        _LOGGER.debug("%s - async_GoveeAPI_ControlDevice: r = %s", entry_id, r)
+        _LOGGER.debug(f"{prefix}r = {r}")
         if isinstance(r, int) and return_status_code == True:
             return r
         if not isinstance(r, int) and not r.get("capability", None) is None:
+            # Extract capability once to avoid repetition
+            capability = r["capability"]
+            state = capability.get("state", {})
+            status = state.get("status", "")
+
+            if status == "failure":
+                error_code = state.get("errorCode", "Unknown")
+                error_msg = state.get("errorMsg", "Unknown error")
+                _LOGGER.error(f"{prefix}API returned error: {error_code} - {error_msg}")
+                # Return error details for upstream handling
+                return {"error_code": error_code, "error_msg": error_msg}
+
+            # Only update state if the command was successful
             entry_data.setdefault(CONF_STATE, {})
             d = device_cfg.get("device")
-            new_cap = r["capability"]
-            v = new_cap.pop("value")
-            new_cap["state"] = {"value": v}
+
+            # Move value into state for consistency
+            v = capability.pop("value")
+            capability["state"] = {"value": v}
+
+            # Find and update the matching capability
             for cap in entry_data[CONF_STATE][d]["capabilities"]:
                 if (
-                    cap["type"] == new_cap["type"]
-                    and cap["instance"] == new_cap["instance"]
+                    cap["type"] == capability["type"]
+                    and cap["instance"] == capability["instance"]
                 ):
                     entry_data[CONF_STATE][d]["capabilities"].remove(cap)
-                    entry_data[CONF_STATE][d]["capabilities"].append(new_cap)
-                    _LOGGER.debug(
-                        "%s - async_GoveeAPI_ControlDevice: updated old capability state: %s",
-                        entry_id,
-                        cap,
-                    )
-                    _LOGGER.debug(
-                        "%s - async_GoveeAPI_ControlDevice: with new capability state: %s",
-                        entry_id,
-                        new_cap,
-                    )
+                    entry_data[CONF_STATE][d]["capabilities"].append(capability)
+                    _LOGGER.debug(f"{prefix}updated old capability state: {cap}")
+                    _LOGGER.debug(f"{prefix}with new capability state: {capability}")
                     return True
         else:
-            _LOGGER.warning(
-                "%s - async_GoveeAPI_ControlDevice: unhandled api return = %s",
-                entry_id,
-                r,
-            )
+            _LOGGER.warning(f"{prefix}unhandled api return = {r}")
         return False
 
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_ControlDevice: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return False
 
 
@@ -431,38 +322,27 @@ def GoveeAPI_GetCachedStateValue(
     hass: HomeAssistant, entry_id: str, device_id, value_type, value_instance
 ):
     """Asnyc: Get value of a state from local cache"""
+    prefix = f"{entry_id} - GoveeAPI_GetCachedStateValue: "
     try:
-        # _LOGGER.debug("%s - async_GoveeAPI_GetCachedStateValue: preparing values", entry_id)
+        # _LOGGER.debug(f"{prefix}preparing values")
         entry_data = hass.data[DOMAIN][entry_id]
         capabilities = ((entry_data.get(CONF_STATE)).get(device_id)).get(
             "capabilities", []
         )
         value = None
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GetCachedStateValue: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return None
 
     try:
-        # _LOGGER.debug("%s - async_GoveeAPI_GetCachedStateValue: getting value: %s - %s", entry_id, value_type, value_instance)
+        # _LOGGER.debug(f"{prefix}getting value: {value_type} - {value_instance}")
         for cap in capabilities:
             if cap["type"] == value_type and cap["instance"] == value_instance:
                 cap_state = cap.get("state", None)
                 if not cap_state == None:
                     value = cap_state.get("value", cap_state.get(value_instance, None))
-        # _LOGGER.debug("%s - async_GoveeAPI_GetCachedStateValue: value: %s = %s", entry_id, value_instance, value)
+        # _LOGGER.debug(f"{prefix}value: {value_instance} = {value}")
         return value
-    except Exception as e:
-        _LOGGER.error(
-            "%s - async_GoveeAPI_GetCachedStateValue: Failed: %s (%s.%s)",
-            entry_id,
-            str(e),
-            e.__class__.__module__,
-            type(e).__name__,
-        )
+    except Exception:
+        _LOGGER.error(f"{prefix}Failed")
         return None

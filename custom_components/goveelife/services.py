@@ -35,8 +35,8 @@ async def async_registerService(hass: HomeAssistant, name:str , service) -> None
             hass.services.async_register(DOMAIN, name, functools.partial(service, hass))
         else:
             _LOGGER.debug("%s - async_registerServic: service already exists: %s", DOMAIN, name)  
-    except Exception as e:
-        _LOGGER.error("%s - async_registerService: failed: %s (%s.%s)", DOMAIN, str(e), e.__class__.__module__, type(e).__name__)        
+    except Exception:
+        _LOGGER.error("%s - async_registerService: failed", DOMAIN)        
 
 
 async def async_service_SetPollInterval(hass: HomeAssistant, call: ServiceCall) -> None:
@@ -55,6 +55,6 @@ async def async_service_SetPollInterval(hass: HomeAssistant, call: ServiceCall) 
         hass.data[DOMAIN][entry_id][CONF_SCAN_INTERVAL] = scan_interval
         _LOGGER.info("%s - async_service_SetPollInterval: Poll interval updated to %s seconds - change active after next poll", DOMAIN, scan_interval)
 
-    except Exception as e:
-        _LOGGER.error("%s - async_service_SetPollInterval: %s failed: %s (%s.%s)", DOMAIN, call, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error("%s - async_service_SetPollInterval: %s failed", DOMAIN, call)
 

@@ -35,15 +35,16 @@ platform_device_types = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up the switch platform."""
+    prefix = f"{entry.entry_id} - async_setup_entry {platform}: "
     _LOGGER.debug("Setting up %s platform entry: %s | %s", platform, DOMAIN, entry.entry_id)
     entities = []
 
     try:
-        _LOGGER.debug("%s - async_setup_entry %s: Getting cloud devices from data store", entry.entry_id, platform)
+        _LOGGER.debug(f"{prefix}Getting cloud devices from data store")
         entry_data = hass.data[DOMAIN][entry.entry_id]
         api_devices = entry_data.get(CONF_DEVICES, [])
-    except Exception as e:
-        _LOGGER.error("%s - async_setup_entry %s: Getting cloud devices from data store failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error(f"{prefix}Getting cloud devices from data store failed")
         return False
 
     for device_cfg in api_devices:
@@ -53,15 +54,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             for capability in device_cfg.get('capabilities', []):
                 capability_key = f"{device_cfg.get('type', STATE_UNKNOWN)}:{capability.get('type', STATE_UNKNOWN)}:{capability.get('instance', STATE_UNKNOWN)}"
                 if any(re.match(platform_match, capability_key) for platform_match in platform_device_types):
-                    _LOGGER.debug("%s - async_setup_entry %s: Setup capability: %s|%s|%s", entry.entry_id, platform, device, capability.get('type', STATE_UNKNOWN).split('.')[-1], capability.get('instance', STATE_UNKNOWN))
+                    _LOGGER.debug(f"{prefix}Setup capability: {device}|{capability.get('type', STATE_UNKNOWN).split('.')[-1]}|{capability.get('instance', STATE_UNKNOWN)}")
                     entity = GoveeLifeSwitch(hass, entry, coordinator, device_cfg, platform=platform, cap=capability)
                     entities.append(entity)
             await asyncio.sleep(0)
-        except Exception as e:
-            _LOGGER.error("%s - async_setup_entry %s: Setup device failed: %s (%s.%s)", entry.entry_id, platform, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix}Setup device failed")
             return False
 
-    _LOGGER.info("%s - async_setup_entry: setup %s %s entities", entry.entry_id, len(entities), platform)
+    _LOGGER.info(f"{prefix}setup {len(entities)} {platform} entities")
     if not entities:
         return None
     async_add_entities(entities)
@@ -88,7 +89,8 @@ class GoveeLifeSwitch(GoveeLifePlatformEntity):
                 self._state_mapping[option['value']] = STATE_OFF
                 self._state_mapping_set[STATE_OFF] = option['value']
             else:
-                _LOGGER.warning("%s - %s: _init_platform_specific: unhandled cap option: %s -> %s", self._api_id, self._identifier, self._cap['type'], option)
+                prefix = f"{self._api_id} - {self._identifier}: _init_platform_specific"
+                _LOGGER.warning(f"{prefix}: unhandled cap option: {self._cap['type']} -> {option}")
 
     @property
     def state(self) -> str | None:
@@ -103,8 +105,9 @@ class GoveeLifeSwitch(GoveeLifePlatformEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn the switch on."""
+        prefix = f"{self._api_id} - {self._identifier}: async_turn_on"
         try:
-            _LOGGER.debug("%s - %s: async_turn_on", self._api_id, self._identifier)
+            _LOGGER.debug(prefix)
             state_capability = {
                 "type": self._cap['type'],
                 "instance": self._cap['instance'],
@@ -112,13 +115,14 @@ class GoveeLifeSwitch(GoveeLifePlatformEntity):
             }
             if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
                 self.async_write_ha_state()
-        except Exception as e:
-            _LOGGER.error("%s - %s: async_turn_on failed: %s (%s.%s)", self._api_id, self._identifier, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix} failed")
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn the switch off."""
+        prefix = f"{self._api_id} - {self._identifier}: async_turn_off"
         try:
-            _LOGGER.debug("%s - %s: async_turn_off", self._api_id, self._identifier)
+            _LOGGER.debug(prefix)
             state_capability = {
                 "type": self._cap['type'],
                 "instance": self._cap['instance'],
@@ -126,5 +130,5 @@ class GoveeLifeSwitch(GoveeLifePlatformEntity):
             }
             if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
                 self.async_write_ha_state()
-        except Exception as e:
-            _LOGGER.error("%s - %s: async_turn_off failed: %s (%s.%s)", self._api_id, self._identifier, str(e), e.__class__.__module__, type(e).__name__)
+        except Exception:
+            _LOGGER.error(f"{prefix} failed")

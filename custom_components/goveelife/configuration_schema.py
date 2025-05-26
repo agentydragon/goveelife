@@ -44,6 +44,6 @@ async def async_get_OPTIONS_GOVEELIFE_SCHEMA(current_data):
         })
         await asyncio.sleep(0)
         return OPTIONS_GOVEELIFE_SCHEMA
-    except Exception as e:
-        _LOGGER.error("%s - async_get_OPTIONS_GOVEELIFE_SCHEMA: failed: %s (%s.%s)", DOMAIN, str(e), e.__class__.__module__, type(e).__name__)
+    except Exception:
+        _LOGGER.error("%s - async_get_OPTIONS_GOVEELIFE_SCHEMA: failed", DOMAIN)
         return GOVEELIFE_SCHEMA
