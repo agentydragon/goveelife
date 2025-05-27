@@ -3,13 +3,11 @@
 from __future__ import annotations
 from typing import Final
 import logging
-import asyncio
 import math
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.util.color import brightness_to_value, value_to_brightness
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -19,97 +17,89 @@ from homeassistant.components.light import (
     LightEntity,
 )
 from homeassistant.const import (
-    CONF_DEVICES,
     STATE_ON,
-    STATE_OFF,
     STATE_UNKNOWN,
 )
 
 from .entities import GoveeLifePlatformEntity
-from .const import DOMAIN, CONF_COORDINATORS
-from .utils import GoveeAPI_GetCachedStateValue, async_GoveeAPI_ControlDevice
+from .error_handling import handle_api_errors
+from .mixins import GoveeApiMixin
+from .models import (
+    CapabilityType,
+    brightness_range,
+    color_rgb,
+    color_temperature,
+)
+from .platform_setup import setup_platform
+from .work_mode_mixin import StateMappingMixin
 
 _LOGGER: Final = logging.getLogger(__name__)
-platform = 'light'
-platform_device_types = ['devices.types.light']
+platform = "light"
+platform_device_types = ["devices.types.light"]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+):
     """Set up the light platform."""
-    prefix = f"{entry.entry_id} - async_setup_entry {platform}: "
-    _LOGGER.debug("Setting up %s platform entry: %s | %s", platform, DOMAIN, entry.entry_id)
-    entities = []
-        
-    try:
-        _LOGGER.debug(f"{prefix}Getting cloud devices from data store")
-        entry_data = hass.data[DOMAIN][entry.entry_id]
-        api_devices = entry_data[CONF_DEVICES]
-    except Exception:
-        _LOGGER.error(f"{prefix}Getting cloud devices from data store failed")
-        return False
+    setup_platform(
+        hass, entry, async_add_entities, platform, platform_device_types, GoveeLifeLight
+    )
 
-    for device_cfg in api_devices:
-        try:
-            if not device_cfg.get('type', STATE_UNKNOWN) in platform_device_types:
-                continue      
-            d = device_cfg.get('device')
-            _LOGGER.debug(f"{prefix}Setup device: {d}") 
-            coordinator = entry_data[CONF_COORDINATORS][d]
-            entity = GoveeLifeLight(hass, entry, coordinator, device_cfg, platform=platform)
-            entities.append(entity)
-            await asyncio.sleep(0)
-        except Exception:
-            _LOGGER.error(f"{prefix}Setup device failed")
-            return False
 
-    _LOGGER.info(f"{prefix}setup {len(entities)} {platform} entities")
-    if not entities:
-        return None
-    async_add_entities(entities)
-
-class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
+class GoveeLifeLight(
+    LightEntity, GoveeLifePlatformEntity, GoveeApiMixin, StateMappingMixin
+):
     """Light class for Govee Life integration."""
 
-    _state_mapping = {}
-    _state_mapping_set = {}
     _attr_supported_color_modes = set()
 
     def _init_platform_specific(self, **kwargs):
         """Platform specific init actions"""
         prefix = f"{self._api_id} - {self._identifier}: _init_platform_specific"
         _LOGGER.debug(prefix)
-        capabilities = self._device_cfg.get('capabilities', [])
 
-        _LOGGER.debug(f"{prefix}: processing devices request capabilities")
-        for cap in capabilities:
-            if cap['type'] == 'devices.capabilities.on_off':
+        # Initialize mixin attributes
+        self.init_state_mappings()
+
+        # Process capabilities
+        for cap in self._device_cfg.get("capabilities", []):
+            if cap["type"] == "devices.capabilities.on_off":
                 self._attr_supported_color_modes.add(ColorMode.ONOFF)
-                for option in cap['parameters']['options']:
-                    if option['name'] == 'on':
-                        self._state_mapping[option['value']] = STATE_ON
-                        self._state_mapping_set[STATE_ON] = option['value']
-                    elif option['name'] == 'off':
-                        self._state_mapping[option['value']] = STATE_OFF
-                        self._state_mapping_set[STATE_OFF] = option['value']
-                    else:
-                        _LOGGER.warning(f"{prefix}: unhandled cap option: {cap['type']} -> {option}")
-            elif cap['type'] == 'devices.capabilities.range' and cap['instance'] == 'brightness':
+                self.process_on_off_capability(cap)
+            elif (
+                cap["type"] == "devices.capabilities.range"
+                and cap["instance"] == "brightness"
+            ):
                 self._attr_supported_color_modes.add(ColorMode.BRIGHTNESS)
-                self._brightness_scale = (cap['parameters']['range']['min'], cap['parameters']['range']['max'])
-            elif cap['type'] == 'devices.capabilities.color_setting' and cap['instance'] == 'colorRgb':
+                self._brightness_scale = (
+                    cap["parameters"]["range"]["min"],
+                    cap["parameters"]["range"]["max"],
+                )
+            elif (
+                cap["type"] == "devices.capabilities.color_setting"
+                and cap["instance"] == "colorRgb"
+            ):
                 self._attr_supported_color_modes.add(ColorMode.RGB)
-            elif cap['type'] == 'devices.capabilities.color_setting' and cap['instance'] == 'colorTemperatureK':
+            elif (
+                cap["type"] == "devices.capabilities.color_setting"
+                and cap["instance"] == "colorTemperatureK"
+            ):
                 self._attr_supported_color_modes.add(ColorMode.COLOR_TEMP)
-                self._attr_min_color_temp_kelvin = cap['parameters']['range']['min']
-                self._attr_max_color_temp_kelvin = cap['parameters']['range']['max']
-            elif cap['type'] == 'devices.capabilities.toggle' and cap['instance'] == 'gradientToggle':
+                self._attr_min_color_temp_kelvin = cap["parameters"]["range"]["min"]
+                self._attr_max_color_temp_kelvin = cap["parameters"]["range"]["max"]
+            elif (
+                cap["type"] == "devices.capabilities.toggle"
+                and cap["instance"] == "gradientToggle"
+            ):
                 pass  # implemented as switch entity type
-            elif cap['type'] == 'devices.capabilities.segment_color_setting':
+            elif cap["type"] == "devices.capabilities.segment_color_setting":
                 pass  # TO-BE-DONE - implement as service?
-            elif cap['type'] == 'devices.capabilities.dynamic_scene':
+            elif cap["type"] == "devices.capabilities.dynamic_scene":
                 pass  # TO-BE-DONE: implement as select entity type
-            elif cap['type'] == 'devices.capabilities.music_setting':
+            elif cap["type"] == "devices.capabilities.music_setting":
                 pass  # TO-BE-DONE: implement as select entity type
-            elif cap['type'] == 'devices.capabilities.dynamic_setting':
+            elif cap["type"] == "devices.capabilities.dynamic_setting":
                 pass  # TO-BE-DONE: implement as select ? unsure about setting effect
             else:
                 _LOGGER.debug(f"{prefix}: cap unhandled: {cap=}")
@@ -130,12 +120,13 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
     @property
     def state(self) -> str | None:
         """Return the current state of the entity."""
-        prefix = f"{self._api_id} - {self._identifier}: state"
-        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.on_off', 'powerSwitch')
+        value = self._device_api.get_on_off_value()
+        if value is None:
+            return STATE_UNKNOWN
         v = self._state_mapping.get(value, STATE_UNKNOWN)
         if v == STATE_UNKNOWN:
-            _LOGGER.warning(f"{prefix}: invalid {value=}")
-            _LOGGER.debug(f"{prefix}: valid are: {self._state_mapping=}")
+            _LOGGER.warning(f"{self.log_prefix}state: invalid {value=}")
+            _LOGGER.debug(f"{self.log_prefix}state: valid are: {self._state_mapping=}")
         return v
 
     @property
@@ -146,83 +137,75 @@ class GoveeLifeLight(LightEntity, GoveeLifePlatformEntity):
     @property
     def brightness(self) -> int | None:
         """Return the current brightness."""
-        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.range', 'brightness')
+        value = self._get_cached_value(CapabilityType.RANGE, "brightness")
+        if value is None:
+            return None
         return value_to_brightness(self._brightness_scale, value)
 
     @property
     def color_temp_kelvin(self) -> int | None:
         """Return the color temperature in Kelvin."""
-        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.color_setting', 'colorTemperatureK')
+        value = self._get_cached_value(
+            CapabilityType.COLOR_SETTING, "colorTemperatureK"
+        )
         return value
 
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
         """Return the rgb color."""
-        value = GoveeAPI_GetCachedStateValue(self.hass, self._entry_id, self._device_cfg.get('device'), 'devices.capabilities.color_setting', 'colorRgb')
+        value = self._get_cached_value(CapabilityType.COLOR_SETTING, "colorRgb")
+        if value is None:
+            return None
         return self._getRGBfromI(value)
 
+    @handle_api_errors
     async def async_turn_on(self, **kwargs) -> None:
         """Async: Turn entity on"""
         prefix = f"{self._api_id} - {self._identifier}: async_turn_on"
-        try:
-            _LOGGER.debug(prefix)
-            _LOGGER.debug(f"{prefix}: {kwargs=}")
-            
-            if ATTR_BRIGHTNESS in kwargs:
-                state_capability = {
-                    "type": "devices.capabilities.range",
-                    "instance": 'brightness',
-                    "value": math.ceil(brightness_to_value(self._brightness_scale, kwargs[ATTR_BRIGHTNESS]))   
-                }
-                if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
-                    self.async_write_ha_state()
+        _LOGGER.debug(prefix)
 
-            if ATTR_COLOR_TEMP_KELVIN in kwargs:
-                state_capability = {
-                    "type": "devices.capabilities.color_setting",
-                    "instance": 'colorTemperatureK',
-                    "value": kwargs[ATTR_COLOR_TEMP_KELVIN]
-                }
-                if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
-                    self.async_write_ha_state()
+        # Extract specific parameters
+        brightness = kwargs.get(ATTR_BRIGHTNESS)
+        color_temp_kelvin = kwargs.get(ATTR_COLOR_TEMP_KELVIN)
+        rgb_color = kwargs.get(ATTR_RGB_COLOR)
 
-            if ATTR_RGB_COLOR in kwargs:
-                state_capability = {
-                    "type": "devices.capabilities.color_setting",
-                    "instance": 'colorRgb',
-                    "value": self._getIfromRGB(kwargs[ATTR_RGB_COLOR])
-                }
-                if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
-                    self.async_write_ha_state()
-            
-            if not self.is_on:
-                state_capability = {
-                    "type": "devices.capabilities.on_off",
-                    "instance": 'powerSwitch',
-                    "value": self._state_mapping_set[STATE_ON]
-                }
-                if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
-                    self.async_write_ha_state()
-            else:
-                _LOGGER.debug(f"{prefix}: device already on")
-        except Exception:
-            _LOGGER.error(f"{prefix} failed")
+        _LOGGER.debug(f"{prefix}: {brightness=}, {color_temp_kelvin=}, {rgb_color=}")
 
+        if brightness is not None:
+            capability = brightness_range(
+                value=math.ceil(brightness_to_value(self._brightness_scale, brightness))
+            )
+            if await self._device_api.control_device(capability):
+                self.async_write_ha_state()
+
+        if color_temp_kelvin is not None:
+            capability = color_temperature(value=color_temp_kelvin)
+            if await self._device_api.control_device(capability):
+                self.async_write_ha_state()
+
+        if rgb_color is not None:
+            capability = color_rgb(value=self._getIfromRGB(rgb_color))
+            if await self._device_api.control_device(capability):
+                self.async_write_ha_state()
+
+        # Turn on the device if not already on
+        if self.is_on:
+            _LOGGER.debug(f"{prefix}: device already on")
+            return
+
+        if await self._turn_on():
+            self.async_write_ha_state()
+
+    @handle_api_errors
     async def async_turn_off(self, **kwargs) -> None:
         """Async: Turn entity off"""
         prefix = f"{self._api_id} - {self._identifier}: async_turn_off"
-        try:
-            _LOGGER.debug(prefix)
-            _LOGGER.debug(f"{prefix}: {kwargs=}")
-            if self.is_on:
-                state_capability = {
-                    "type": "devices.capabilities.on_off",
-                    "instance": 'powerSwitch',
-                    "value": self._state_mapping_set[STATE_OFF]
-                }
-                if await async_GoveeAPI_ControlDevice(self.hass, self._entry_id, self._device_cfg, state_capability):
-                    self.async_write_ha_state()
-            else:
-                _LOGGER.debug(f"{prefix}: device already off")
-        except Exception:
-            _LOGGER.error(f"{prefix} failed")
+        _LOGGER.debug(prefix)
+        _LOGGER.debug(f"{prefix}: {kwargs=}")
+
+        if not self.is_on:
+            _LOGGER.debug(f"{prefix}: device already off")
+            return
+
+        if await self._turn_off():
+            self.async_write_ha_state()

@@ -1,27 +1,16 @@
 """Config flow for Govee Life."""
 
 from __future__ import annotations
-from typing import Final, Optional, Dict, Any
+
 import logging
-import asyncio
-import voluptuous as vol
+from typing import Any, Dict, Final, Optional
 
 from homeassistant import config_entries
+from homeassistant.const import CONF_FRIENDLY_NAME, CONF_RESOURCE
 from homeassistant.core import callback
-import homeassistant.helpers.config_validation as cv
-from homeassistant.const import (
-    CONF_FRIENDLY_NAME,
-    CONF_RESOURCE,
-)
 
-from .configuration_schema import (
-    GOVEELIFE_SCHEMA,
-    async_get_OPTIONS_GOVEELIFE_SCHEMA,
-)
-from .const import (
-    DEFAULT_NAME,
-    DOMAIN,
-)
+from .configuration_schema import GOVEELIFE_SCHEMA, async_get_OPTIONS_GOVEELIFE_SCHEMA
+from .const import DEFAULT_NAME, DOMAIN
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -54,17 +43,20 @@ class ConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_resource(self, user_input: Optional[Dict[str, Any]] = None):
         """Handle resource step in config flow."""
-        _LOGGER.debug(f"{self.log_prefix}async_step_resource: {user_input}")
+        log_prefix = f"{self.log_prefix}async_step_resource: "
+        _LOGGER.debug(f"{log_prefix}{user_input = }")
         try:
             errors: Dict[str, str] = {}
             if user_input is not None:
-                _LOGGER.debug(f"{self.log_prefix}async_step_resource add user_input to data")
+                _LOGGER.debug(f"{log_prefix}add user_input to data")
                 self.data = user_input
                 return await self.async_step_final()
-            return self.async_show_form(step_id=CONF_RESOURCE, data_schema=GOVEELIFE_SCHEMA, errors=errors)
+            return self.async_show_form(
+                step_id=CONF_RESOURCE, data_schema=GOVEELIFE_SCHEMA, errors=errors
+            )
             # via the "step_id" the function calls itself after GUI completion
         except Exception:
-            _LOGGER.error(f"{self.log_prefix}async_step_resource failed")
+            _LOGGER.error(f"{log_prefix}failed")
             return self.async_abort(reason="exception")
 
     async def async_step_final(self, user_input: Optional[Dict[str, Any]] = None):
@@ -94,34 +86,47 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         _LOGGER.debug(f"{self.log_prefix}__init__: {config_entry}")
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def async_step_init(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Manage the options for Govee Life."""
-        _LOGGER.debug(f"{self.log_prefix}async_step_init: {user_input}")
+        log_prefix = f"{self.log_prefix}async_step_init: "
+        _LOGGER.debug(f"{log_prefix}{user_input}")
         try:
-            if not hasattr(self, 'data'):
+            if not hasattr(self, "data"):
                 self.data = {}
-            if self.config_entry.source == config_entries.SOURCE_USER:
-                return await self.async_step_config_resource()
-            else:
-                _LOGGER.warning(f"{self.log_prefix}async_step_init: source not supported: {self.config_entry.source}")
+            if self.config_entry.source != config_entries.SOURCE_USER:
+                _LOGGER.warning(
+                    f"{log_prefix}source unsupported: {self.config_entry.source}"
+                )
                 return self.async_abort(reason="not_supported")
+            return await self.async_step_config_resource()
         except Exception:
-            _LOGGER.error(f"{self.log_prefix}async_step_init failed")
+            _LOGGER.error(f"{log_prefix}failed")
             return self.async_abort(reason="exception")
 
-    async def async_step_config_resource(self, user_input: Optional[Dict[str, Any]] = None):
+    async def async_step_config_resource(
+        self, user_input: Optional[Dict[str, Any]] = None
+    ):
         """Handle resource configuration step in options flow."""
-        _LOGGER.debug(f"{self.log_prefix}async_step_config_resource: {user_input}")
+        log_prefix = f"{self.log_prefix}async_step_config_resource: "
+        _LOGGER.debug(f"{log_prefix}{user_input}")
         try:
-            OPTIONS_GOVEELIFE_SCHEMA = await async_get_OPTIONS_GOVEELIFE_SCHEMA(self.config_entry.data)
+            OPTIONS_GOVEELIFE_SCHEMA = await async_get_OPTIONS_GOVEELIFE_SCHEMA(
+                self.config_entry.data
+            )
             if not user_input:
-                return self.async_show_form(step_id="config_resource", data_schema=OPTIONS_GOVEELIFE_SCHEMA)
-            _LOGGER.debug(f"{self.log_prefix}async_step_config_resource - user_input: {user_input}")
-            self.hass.config_entries.async_update_entry(self.config_entry, data=user_input, options=self.config_entry.options)
-            _LOGGER.debug(f"{self.log_prefix}async_step_config_resource complete: {user_input}")
+                return self.async_show_form(
+                    step_id="config_resource", data_schema=OPTIONS_GOVEELIFE_SCHEMA
+                )
+            _LOGGER.debug(f"{log_prefix}{user_input = }")
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=user_input, options=self.config_entry.options
+            )
+            _LOGGER.debug(f"{log_prefix}complete: {user_input}")
             return await self.async_step_final()
         except Exception:
-            _LOGGER.error(f"{self.log_prefix}async_step_config_resource failed")
+            _LOGGER.error(f"{log_prefix}failed")
             return self.async_abort(reason="exception")
 
     async def async_step_final(self):
@@ -129,8 +134,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         try:
             _LOGGER.debug(f"{self.log_prefix}async_step_final")
             return self.async_create_entry(title="", data={})
-            #title=self.data.get(CONF_FRIENDLY_NAME, DEFAULT_NAME)
-            #return self.async_create_entry(title=title, data=self.data)
+            # title=self.data.get(CONF_FRIENDLY_NAME, DEFAULT_NAME)
+            # return self.async_create_entry(title=title, data=self.data)
         except Exception:
             _LOGGER.error(f"{self.log_prefix}async_step_final failed")
             return self.async_abort(reason="exception")

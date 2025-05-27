@@ -58,6 +58,21 @@ curl -H 'Govee-API-Key: YOUR_KEY' -X POST https://openapi.api.govee.com/router/a
 3. Add capability handling in the corresponding platform file
 4. Update entity attributes and services as needed
 
+## Code Style Rules
+
+- **Imports go at the top of files**: All import statements must be at the top of the file, not inside functions or methods
+- **Early return pattern**: Use early returns to avoid nested if/else blocks. Example:
+  ```python
+  # Good
+  if value is None:
+      continue
+  # Happy path code here
+  
+  # Bad
+  if value is not None:
+      # Happy path code here
+  ```
+
 ## Important Considerations
 
 - **No Build System**: This is a standard Home Assistant custom component - no build/compile steps needed
